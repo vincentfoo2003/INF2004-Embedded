@@ -35,7 +35,10 @@ pico_sdk_init()
 
 # Add executable. Default name is the project name, version 0.1
 
-add_executable(Robo_Car Robo_Car.c )
+add_executable(Robo_Car 
+Robo_Car.c 
+motor_pid_driver.c
+ )
 
 pico_set_program_name(Robo_Car "Robo_Car")
 pico_set_program_version(Robo_Car "0.1")
