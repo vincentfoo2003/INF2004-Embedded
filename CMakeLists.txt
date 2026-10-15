@@ -42,11 +42,12 @@ pico_set_program_version(Robo_Car "0.1")
 
 # Modify the below lines to enable/disable output over UART/USB
 pico_enable_stdio_uart(Robo_Car 0)
-pico_enable_stdio_usb(Robo_Car 0)
+pico_enable_stdio_usb(Robo_Car 1)
 
 # Add the standard library to the build
 target_link_libraries(Robo_Car
-        pico_stdlib)
+        pico_stdlib
+        hardware_pwm)
 
 # Add the standard include files to the build
 target_include_directories(Robo_Car PRIVATE
