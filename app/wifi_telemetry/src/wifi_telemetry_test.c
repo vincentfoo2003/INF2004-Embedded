@@ -5,6 +5,9 @@
 #include "task.h"
 #include "telemetry.h"
 
+#define SSID "-"
+#define PASS "-"
+
 mqtt_client_t *mqtt_client;
 
 void mqtt_publish_task(__unused void *params) {
