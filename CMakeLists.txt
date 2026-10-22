@@ -27,9 +27,11 @@ set(PICO_BOARD pico_w CACHE STRING "Board type")
 
 # Pull in Raspberry Pi Pico SDK (must be before project)
 include(pico_sdk_import.cmake)
+include(FreeRTOS_Kernel_import.cmake)
 
 project(INF2004-Embedded C CXX ASM)
 
 pico_sdk_init()
 
 add_subdirectory(app/subsystem_2)
+add_subdirectory(app/wifi_telemetry)
