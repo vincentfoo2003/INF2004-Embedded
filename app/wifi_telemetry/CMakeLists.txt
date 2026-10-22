@@ -10,6 +10,10 @@ target_include_directories(wifi_telemetry PUBLIC
     ${CMAKE_CURRENT_LIST_DIR}/include
 )
 
+target_include_directories(wifi_telemetry PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/..
+)
+
 target_link_libraries(wifi_telemetry
     pico_stdlib
     pico_cyw43_arch_lwip_sys_freertos
@@ -28,6 +32,7 @@ add_executable(wifi_telemetry_test
 
 target_include_directories(wifi_telemetry_test PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/include
+    ${CMAKE_CURRENT_LIST_DIR}/..
 )
 
 target_link_libraries(wifi_telemetry_test
