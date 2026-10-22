@@ -22,11 +22,32 @@ target_compile_definitions(wifi_telemetry PRIVATE
     LWIP_SOCKET=0       # we need the socket API (generally this would be in your lwipopts.h)
 )
 
-# printf goes over USB; the link under test is UART1 on GP8/GP9
-# pico_enable_stdio_usb(wifi_telemetry 1)
-# pico_enable_stdio_uart(wifi_telemetry 0)
+add_executable(wifi_telemetry_test
+    src/wifi_telemetry_test.c
+)
 
-# pico_add_extra_outputs(wifi_telemetry)
+target_include_directories(wifi_telemetry_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/include
+)
+
+target_link_libraries(wifi_telemetry_test
+    pico_stdlib
+    pico_cyw43_arch_lwip_sys_freertos
+    pico_lwip_mqtt
+    FreeRTOS-Kernel-Heap4 # FreeRTOS kernel and dynamic heap
+    wifi_telemetry
+)
+
+target_compile_definitions(wifi_telemetry_test PRIVATE
+    NO_SYS=0            # don't want NO_SYS (generally this would be in your lwipopts.h)
+    LWIP_SOCKET=0       # we need the socket API (generally this would be in your lwipopts.h)
+)
+
+# printf goes over USB; the link under test is UART1 on GP8/GP9
+pico_enable_stdio_usb(wifi_telemetry_test 1)
+pico_enable_stdio_uart(wifi_telemetry_test 0)
+
+pico_add_extra_outputs(wifi_telemetry_test)
 
 # --------------------------------------------------------------------
 # The Pico SDK does not enable compiler warnings by default. Several of
