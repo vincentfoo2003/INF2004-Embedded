@@ -33,5 +33,6 @@ project(INF2004-Embedded C CXX ASM)
 
 pico_sdk_init()
 
+add_subdirectory(app)
 add_subdirectory(app/subsystem_2)
 add_subdirectory(app/wifi_telemetry)
