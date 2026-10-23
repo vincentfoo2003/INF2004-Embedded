@@ -4,13 +4,15 @@
 
 void mqtt_pub_request_cb(void *arg, err_t result) {
     if (result == ERR_OK) {
-        printf("[INFO] Published to broker %s:%d\n", SERVER_IP, SERVER_PORT);
+        mqtt_config_t *config = (mqtt_config_t *)arg; 
+        printf("[INFO] Published to broker %s:%d\n", config->ip, config->port);
     }
 }
 
 void mqtt_sub_request_cb(void *arg, err_t result) {
     if (result == ERR_OK) {
-        printf("[INFO] Subscribed to topic: %s\n", MQTT_TOPIC);
+        mqtt_config_t *config = (mqtt_config_t *)arg; 
+        printf("[INFO] Subscribed to topic: %s\n", config->topic);
     }
 }
 
@@ -24,45 +26,55 @@ void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t flags) {
 
 void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection_status_t status) {
     if (status == MQTT_CONNECT_ACCEPTED) {
-        printf("[INFO] Connected to broker %s:%d\n", SERVER_IP, SERVER_PORT);
-        mqtt_subscribe(client, MQTT_TOPIC, 0, mqtt_sub_request_cb, NULL);
+        mqtt_config_t *config = (mqtt_config_t *)arg; 
+        printf("[INFO] Connected to broker %s:%d\n", config->ip, config->port);
+        mqtt_subscribe(client, config->topic, 0, mqtt_sub_request_cb, config);
     } else {
         printf("[ERROR] MQTT connection failed: %d\n", status);
     }
 }
 
-void mqtt_setup(mqtt_client_t *client, bool log) {
+mqtt_config_t mqtt_setup(const char *ip, uint16_t port, const char *topic, bool log) { 
+    mqtt_config_t config;
+    config.client = mqtt_client_new();
+    config.ip = ip;
+    config.port = port;
+    config.topic = topic;
+    config.log = log;
+
     if (log) {
-        mqtt_set_inpub_callback(client, mqtt_incoming_publish_cb, mqtt_incoming_data_cb, NULL);
+        mqtt_set_inpub_callback(config.client, mqtt_incoming_publish_cb, mqtt_incoming_data_cb, &config);
     } else {
-        mqtt_set_inpub_callback(client, NULL, NULL, NULL);
+        mqtt_set_inpub_callback(config.client, NULL, NULL, NULL);
     } 
+
+    return config;
 }
 
-void mqtt_connect(mqtt_client_t *client, bool log) {
+void mqtt_connect(mqtt_config_t *config) {
     ip_addr_t broker_ip;
-    ipaddr_aton(SERVER_IP, &broker_ip);
-     
+    ipaddr_aton(config->ip, &broker_ip);
+
     struct mqtt_connect_client_info_t ci;
     memset(&ci, 0, sizeof(ci));
     ci.client_id = "pico_w";
     ci.keep_alive = 60;
 
-    if (log) {
-        mqtt_client_connect(client, &broker_ip, SERVER_PORT, 
-            mqtt_connection_cb, NULL, &ci);
+    if (config->log) {
+        mqtt_client_connect(config->client, &broker_ip, config->port, 
+            mqtt_connection_cb, config, &ci);
     } else {
-        mqtt_client_connect(client, &broker_ip, SERVER_PORT, 
+        mqtt_client_connect(config->client, &broker_ip, config->port, 
             NULL, NULL, &ci);
     }
 }
 
-void mqtt_pub(mqtt_client_t *client, const void *payload, u16_t payload_len, bool log) {
-    if (log) {
-        mqtt_publish(client, MQTT_TOPIC, payload, payload_len, 0, 0, 
-            mqtt_pub_request_cb, NULL);
+void mqtt_pub(mqtt_config_t *config, const void *payload, u16_t payload_len) {
+    if (config->log) {
+        mqtt_publish(config->client, config->topic, payload, payload_len, 0, 0, 
+            mqtt_pub_request_cb, config);
     } else {
-        mqtt_publish(client, MQTT_TOPIC, payload, payload_len, 0, 0, 
+        mqtt_publish(config->client, config->topic, payload, payload_len, 0, 0, 
             NULL, NULL);
     }
 }
