@@ -39,7 +39,7 @@ void mqtt_publish_task(__unused void *params) {
         
         while (conn_status() == 1 || conn_status() == 3) {
             if (xQueueReceive(xTelemetryQueue, &telemetry, pdMS_TO_TICKS(500)) == pdPASS) {
-                printf("[INFO] Received: {id: %u, data: %u}\n", telemetry.id, telemetry.data);
+                printf("[INFO] Retreived {id: %u, data: %u} from queue\n", telemetry.id, telemetry.data);
 
                 // basic serializer for demonstration purposes only.
                 char serialized_data[4];
@@ -81,7 +81,7 @@ void dummy_task(__unused void *params) {
         telemetry.data = counter++;
         
         if (xQueueSend(xTelemetryQueue, &telemetry, pdMS_TO_TICKS(100)) == pdPASS) {
-            printf("[INFO] Sent {id: %u, data: %u}\n", telemetry.id, telemetry.data);
+            printf("[INFO] Sent {id: %u, data: %u} to queue\n", telemetry.id, telemetry.data);
         } else {
             printf("[ERROR] Failed to send message\n");
         }
