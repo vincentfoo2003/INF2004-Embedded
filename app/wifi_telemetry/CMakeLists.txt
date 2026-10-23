@@ -4,6 +4,7 @@ project(wifi_telemetry C CXX ASM)
 
 add_library(wifi_telemetry
     src/wifi_telemetry.c
+    src/connect.c
 )
 
 target_include_directories(wifi_telemetry PUBLIC

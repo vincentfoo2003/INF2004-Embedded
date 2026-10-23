@@ -4,6 +4,7 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "telemetry.h"
+#include "connect.h"
 
 #define SSID "-"
 #define PASS "-"
@@ -32,30 +33,13 @@ void mqtt_publish_task(__unused void *params) {
 }
 
 void connect_task(__unused void *params) {
-    if (cyw43_arch_init()) {
-        printf("[ERROR] Failed to initialise\n");
-        return;
-    }
-    cyw43_arch_enable_sta_mode();
-    printf("[INFO] Attempting to connect to wireless endpoint: %s\n", SSID);
-
-    if (cyw43_arch_wifi_connect_timeout_ms(SSID, PASS, CYW43_AUTH_WPA2_MIXED_PSK, 30000)) {
-        printf("[ERROR] Failed to establish Wi-Fi connection\n");
+    if(connect(SSID, PASS, 0, 1)) {
         exit(1);
     } else {
-        printf("[INFO] Connected to %s with IP: %s\n", SSID, ip4addr_ntoa(&netif_default->ip_addr));
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, 1);
         xTaskCreate(mqtt_publish_task, "MQTTPubThread", configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY + 1UL, NULL);
     }
 
     vTaskDelete(NULL);
-
-    /*while (true) {
-        vTaskDelay(10000);
-    }
-
-    cyw43_arch_disable_sta_mode();
-    cyw43_arch_deinit();*/
 }
 
 void vLaunch( void) {
