@@ -5,7 +5,7 @@
 int connect(const char *ssid, const char *pw, bool reconn, bool log) {
     int res;
     
-    if (reconn) {
+    if (!reconn) {
         res = cyw43_arch_init();
         if (res) {
             if (log) printf("[ERROR] Failed to initialise\n");
