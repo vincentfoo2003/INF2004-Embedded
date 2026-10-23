@@ -12,8 +12,6 @@ target_include_directories(app PRIVATE
 
 target_link_libraries(app
     pico_stdlib
-    pico_cyw43_arch_lwip_sys_freertos
-    pico_lwip_mqtt
     FreeRTOS-Kernel-Heap4 # FreeRTOS kernel and dynamic heap
     wifi_telemetry
 )
