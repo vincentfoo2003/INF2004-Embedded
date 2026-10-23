@@ -7,6 +7,9 @@
 
 #define SSID "-"
 #define PASS "-"
+#define SERVER_IP "192.168.1.100"
+#define SERVER_PORT 8080
+#define MQTT_TOPIC "test/topic"
 
 #define TASK_WIFI_PRIORITY tskIDLE_PRIORITY + 1UL
 #define TASK_DUMMY_PRIORITY tskIDLE_PRIORITY + 2UL
@@ -21,7 +24,7 @@ TaskHandle_t xTaskConnect;
 TaskHandle_t xTaskMqtt;
 TaskHandle_t xTaskDummy;
 
-mqtt_client_t *mqtt_client;
+mqtt_config_t mqtt_config;
 
 void mqtt_publish_task(__unused void *params) {
     TelemetryData telemetry;
@@ -29,11 +32,10 @@ void mqtt_publish_task(__unused void *params) {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        mqtt_client = mqtt_client_new();
-        mqtt_setup(mqtt_client, true);
+        mqtt_config = mqtt_setup(SERVER_IP, SERVER_PORT, MQTT_TOPIC, 1);
           
         printf("[INFO] Attempting to connect to broker at %s:%d\n", SERVER_IP, SERVER_PORT);
-        mqtt_connect(mqtt_client, true);
+        mqtt_connect(&mqtt_config);
         
         while (conn_status() == 1 || conn_status() == 3) {
             if (xQueueReceive(xTelemetryQueue, &telemetry, pdMS_TO_TICKS(500)) == pdPASS) {
@@ -43,7 +45,7 @@ void mqtt_publish_task(__unused void *params) {
                 char serialized_data[4];
                 sprintf(serialized_data, "%u%u", telemetry.id, telemetry.data);
 
-                mqtt_pub(mqtt_client, &serialized_data, sizeof(serialized_data), true);
+                mqtt_pub(&mqtt_config, &serialized_data, sizeof(serialized_data));
             } else {
                 printf("[WARN] Queue is empty or timeout occurred\n");
             }
