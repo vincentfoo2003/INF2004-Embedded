@@ -3,12 +3,16 @@
 
 #include "lwip/apps/mqtt.h"
 
-#define SERVER_IP "192.168.1.100"
-#define SERVER_PORT 8080
-#define MQTT_TOPIC "test/topic"
+struct mqtt_config_s {
+    mqtt_client_t *client;
+    const char *ip;
+    uint16_t port;
+    const char *topic;
+    bool log;
+} typedef mqtt_config_t;
 
-void mqtt_setup(mqtt_client_t *client, bool log);
-void mqtt_connect(mqtt_client_t *client, bool log);
-void mqtt_pub(mqtt_client_t *client, const void *payload, u16_t payload_len, bool log);
+mqtt_config_t mqtt_setup(const char *ip, uint16_t port, const char *topic, bool log);
+void mqtt_connect(mqtt_config_t *config);
+void mqtt_pub(mqtt_config_t *config, const void *payload, u16_t payload_len);
 
 #endif
