@@ -1,6 +1,4 @@
 #include "pico/stdlib.h"
-#include "pico/cyw43_arch.h"
-#include "lwip/apps/mqtt.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "telemetry.h"
@@ -8,24 +6,26 @@
 
 #define SSID "-"
 #define PASS "-"
+#define SERVER_IP "192.168.1.100"
+#define SERVER_PORT 8080
+#define MQTT_TOPIC "test/topic"
 
-mqtt_client_t *mqtt_client;
+mqtt_config_t config;
 
 void mqtt_publish_task(__unused void *params) {
     //int status = cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA); 
     //printf("WiFi status: %d (CYW43_LINK_UP=%d)\n", status, CYW43_LINK_UP);
 
-    mqtt_client = mqtt_client_new();
-    mqtt_setup(mqtt_client, true);
+    config = mqtt_setup(SERVER_IP, SERVER_PORT, MQTT_TOPIC, 1);
 
     printf("[INFO] Attempting to connect to broker at %s:%d\n", SERVER_IP, SERVER_PORT);
-    mqtt_connect(mqtt_client, true);
+    mqtt_connect(&config);
     
     char payload[] = "Hello";
     uint8_t payload_len = sizeof(payload) - 1; 
 
     while (1) {
-        mqtt_pub(mqtt_client, payload, payload_len, true);
+        mqtt_pub(&config, payload, payload_len);
         vTaskDelay(pdMS_TO_TICKS(10000));
     }
 
