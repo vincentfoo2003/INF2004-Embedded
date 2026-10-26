@@ -10,6 +10,7 @@
 #define SERVER_IP "192.168.1.100"
 #define SERVER_PORT 8080
 #define MQTT_TOPIC "test/topic"
+#define LOG true
 
 #define TASK_WIFI_PRIORITY tskIDLE_PRIORITY + 1UL
 #define TASK_DUMMY_PRIORITY tskIDLE_PRIORITY + 2UL
@@ -32,7 +33,7 @@ void mqtt_publish_task(__unused void *params) {
     while (1) {
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        mqtt_config = mqtt_setup(SERVER_IP, SERVER_PORT, MQTT_TOPIC, 1);
+        mqtt_config = mqtt_setup(SERVER_IP, SERVER_PORT, MQTT_TOPIC, LOG);
           
         mqtt_connect(&mqtt_config);
         
@@ -59,7 +60,7 @@ void mqtt_publish_task(__unused void *params) {
 void connect_task(__unused void *params) {
     bool reconn = 0;
     while (1) {
-        if(connect(SSID, PASS, reconn, 1)) {
+        if(connect(SSID, PASS, reconn, LOG)) {
             reconn = 1;
             continue;
         } else {
