@@ -34,7 +34,6 @@ void mqtt_publish_task(__unused void *params) {
 
         mqtt_config = mqtt_setup(SERVER_IP, SERVER_PORT, MQTT_TOPIC, 1);
           
-        printf("[INFO] Attempting to connect to broker at %s:%d\n", SERVER_IP, SERVER_PORT);
         mqtt_connect(&mqtt_config);
         
         while (conn_status() == 1 || conn_status() == 3) {
