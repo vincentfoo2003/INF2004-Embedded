@@ -61,6 +61,7 @@ void mqtt_connect(mqtt_config_t *config) {
     ci.keep_alive = 60;
 
     if (config->log) {
+        printf("[INFO] Attempting to connect to broker at %s:%d\n", config->ip, config->port);
         mqtt_client_connect(config->client, &broker_ip, config->port, 
             mqtt_connection_cb, config, &ci);
     } else {
