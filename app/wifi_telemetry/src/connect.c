@@ -29,7 +29,11 @@ int connect(const char *ssid, const char *pw, bool reconn, bool log) {
 
 // See CYW43_LINK_ in cyw43.h for status codes.
 int conn_status() {
-    return cyw43_wifi_link_status(&cyw43_state, CYW43_ITF_STA); 
+    return cyw43_tcpip_link_status(&cyw43_state, CYW43_ITF_STA); 
+}
+
+void conn_poll() {
+    cyw43_arch_poll();
 }
 
 void shutdown_wifi(bool log) {

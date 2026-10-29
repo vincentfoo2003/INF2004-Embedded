@@ -14,5 +14,9 @@ struct mqtt_config_s {
 mqtt_config_t mqtt_setup(const char *ip, uint16_t port, const char *topic, bool log);
 void mqtt_connect(mqtt_config_t *config);
 void mqtt_pub(mqtt_config_t *config, const void *payload, u16_t payload_len);
+u8_t mqtt_status(mqtt_config_t *config);
+
+/** Call this function when the Wi-Fi connection drops, or if you want to manually disconnect. */
+void mqtt_wifi_disconnect(mqtt_config_t *config);
 
 #endif
