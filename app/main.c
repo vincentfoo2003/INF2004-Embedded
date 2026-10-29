@@ -22,38 +22,55 @@ typedef struct {
 
 QueueHandle_t xTelemetryQueue = NULL;
 TaskHandle_t xTaskConnect;
-TaskHandle_t xTaskMqtt;
+TaskHandle_t xTaskMqttPub;
+TaskHandle_t xTaskMqttConn;
 TaskHandle_t xTaskDummy;
 
 mqtt_config_t mqtt_config;
 
 void mqtt_publish_task(__unused void *params) {
     TelemetryData telemetry;
-
-    while (1) {
+    
+    while (1) { 
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        mqtt_config = mqtt_setup(SERVER_IP, SERVER_PORT, MQTT_TOPIC, LOG);
-          
-        mqtt_connect(&mqtt_config);
+        if (xQueueReceive(xTelemetryQueue, &telemetry, pdMS_TO_TICKS(500)) == pdPASS) {
+            printf("[INFO] Retreived {id: %u, data: %u} from queue\n", telemetry.id, telemetry.data);
+            
+            // basic serializer for demonstration purposes only.
+            char serialized_data[7];
+            sprintf(serialized_data, "%u%u", telemetry.id, telemetry.data);
+            
+            mqtt_pub(&mqtt_config, &serialized_data, sizeof(serialized_data));
+        } else {
+            printf("[WARN] Queue is empty or timeout occurred\n");
+        }
+    }
+}
+
+void mqtt_conn_task(__unused void *params) {
+    bool setup = 0;
+    
+    while (1) {
+        if (conn_status() <= 1) ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         
-        while (conn_status() == 1 || conn_status() == 3) {
-            if (xQueueReceive(xTelemetryQueue, &telemetry, pdMS_TO_TICKS(500)) == pdPASS) {
-                printf("[INFO] Retreived {id: %u, data: %u} from queue\n", telemetry.id, telemetry.data);
-
-                // basic serializer for demonstration purposes only.
-                char serialized_data[4];
-                sprintf(serialized_data, "%u%u", telemetry.id, telemetry.data);
-
-                mqtt_pub(&mqtt_config, &serialized_data, sizeof(serialized_data));
-            } else {
-                printf("[WARN] Queue is empty or timeout occurred\n");
-            }
-
-            vTaskDelay(pdMS_TO_TICKS(10000));
+        if (!setup) {
+            mqtt_config = mqtt_setup(SERVER_IP, SERVER_PORT, MQTT_TOPIC, LOG);
+            setup = 1;
         }
         
-        xTaskNotifyGive(xTaskConnect);
+        mqtt_connect(&mqtt_config);
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        
+        if (mqtt_status(&mqtt_config) == 0) {
+            mqtt_wifi_disconnect(&mqtt_config);
+            continue;
+        }
+        
+        xTaskNotifyGive(xTaskMqttPub);
+        vTaskDelay(pdMS_TO_TICKS(5000));
+        
+        mqtt_wifi_disconnect(&mqtt_config);
     }
 }
 
@@ -64,11 +81,16 @@ void connect_task(__unused void *params) {
             reconn = 1;
             continue;
         } else {
-            xTaskNotifyGive(xTaskMqtt);
+            xTaskNotifyGive(xTaskMqttConn);
         }
         
         reconn = 1;
-        ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
+        
+        while (conn_status() > 1) {
+            conn_poll();
+            // printf("conn_status: %d\n", conn_status());
+            vTaskDelay(pdMS_TO_TICKS(5000));
+        }
     }
 }
 
@@ -93,7 +115,8 @@ void dummy_task(__unused void *params) {
 void vLaunch( void) {
     xTaskCreate(dummy_task, "DummyThread", configMINIMAL_STACK_SIZE, NULL, TASK_DUMMY_PRIORITY, &xTaskDummy);
     xTaskCreate(connect_task, "ConnectThread", configMINIMAL_STACK_SIZE, NULL, TASK_WIFI_PRIORITY, &xTaskConnect);
-    xTaskCreate(mqtt_publish_task, "MQTTPubThread", configMINIMAL_STACK_SIZE, NULL, TASK_WIFI_PRIORITY, &xTaskMqtt);
+    xTaskCreate(mqtt_conn_task, "MQTTConnThread", configMINIMAL_STACK_SIZE, NULL, TASK_WIFI_PRIORITY, &xTaskMqttConn);
+    xTaskCreate(mqtt_publish_task, "MQTTPubThread", configMINIMAL_STACK_SIZE, NULL, TASK_WIFI_PRIORITY, &xTaskMqttPub);
     vTaskStartScheduler();
 }
 
