@@ -1,6 +1,9 @@
 #include "pico/stdlib.h"
 #include "telemetry.h"
+#include <lwip/apps/mqtt.h>
 #include <string.h>
+
+bool mqtt_connected = 0;
 
 void mqtt_pub_request_cb(void *arg, err_t result) {
     if (result == ERR_OK) {
@@ -25,11 +28,14 @@ void mqtt_incoming_data_cb(void *arg, const u8_t *data, u16_t len, u8_t flags) {
 }
 
 void mqtt_connection_cb(mqtt_client_t *client, void *arg, mqtt_connection_status_t status) {
+    mqtt_config_t *config = (mqtt_config_t *)arg; 
+
     if (status == MQTT_CONNECT_ACCEPTED) {
-        mqtt_config_t *config = (mqtt_config_t *)arg; 
+        mqtt_connected = 1;
         printf("[INFO] Connected to broker %s:%d\n", config->ip, config->port);
         mqtt_subscribe(client, config->topic, 0, mqtt_sub_request_cb, config);
     } else {
+        mqtt_connected = 0;
         printf("[ERROR] MQTT connection failed: %d\n", status);
     }
 }
@@ -52,6 +58,8 @@ mqtt_config_t mqtt_setup(const char *ip, uint16_t port, const char *topic, bool 
 }
 
 void mqtt_connect(mqtt_config_t *config) {
+    if (mqtt_connected) return;
+
     ip_addr_t broker_ip;
     ipaddr_aton(config->ip, &broker_ip);
 
@@ -78,4 +86,13 @@ void mqtt_pub(mqtt_config_t *config, const void *payload, u16_t payload_len) {
         mqtt_publish(config->client, config->topic, payload, payload_len, 0, 0, 
             NULL, NULL);
     }
+}
+
+u8_t mqtt_status(mqtt_config_t *config) {
+    return mqtt_connected;
+}
+
+void mqtt_wifi_disconnect(mqtt_config_t *config) {
+    mqtt_disconnect(config->client);
+    mqtt_connected = 0;
 }
