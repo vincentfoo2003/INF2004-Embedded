@@ -1,37 +1,48 @@
 cmake_minimum_required(VERSION 3.13)
 
-project(Robo_Car C CXX ASM)
+project(motor_pid_driver C CXX ASM)
 
-# Initialise the Raspberry Pi Pico SDK
-pico_sdk_init()
-
-# Add executable. Default name is the project name, version 0.1
-
-add_executable(Robo_Car 
-    Robo_Car.c 
-    motor_pid_driver.c
+add_library(motor_pid_driver
+    src/motor_pid_driver.c
 )
 
-pico_set_program_name(Robo_Car "Robo_Car")
-pico_set_program_version(Robo_Car "0.1")
+target_include_directories(motor_pid_driver PUBLIC
+    ${CMAKE_CURRENT_LIST_DIR}/include
+)
 
-# Modify the below lines to enable/disable output over UART/USB
-pico_enable_stdio_uart(Robo_Car 0)
-pico_enable_stdio_usb(Robo_Car 1)
+target_include_directories(motor_pid_driver PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/..
+)
 
-# Add the standard library to the build
-target_link_libraries(Robo_Car
+target_link_libraries(motor_pid_driver
     pico_stdlib
     hardware_pwm
+    hardware_gpio
+    FreeRTOS-Kernel-Heap4 # FreeRTOS kernel and dynamic heap
 )
 
-# Add the standard include files to the build
-target_include_directories(Robo_Car PRIVATE
-    ${CMAKE_CURRENT_LIST_DIR}
+add_executable(motor_pid_driver_test
+    src/motor_pid_driver_test.c
 )
 
-# Add any user requested libraries
-target_link_libraries(Robo_Car)
+target_include_directories(motor_pid_driver_test PRIVATE
+    ${CMAKE_CURRENT_LIST_DIR}/include
+    ${CMAKE_CURRENT_LIST_DIR}/..
+)
 
-pico_add_extra_outputs(Robo_Car)
+target_link_libraries(motor_pid_driver_test
+    pico_stdlib
+    hardware_pwm
+    hardware_gpio
+    FreeRTOS-Kernel-Heap4 # FreeRTOS kernel and dynamic heap
+    motor_pid_driver
+)
 
+# printf goes over USB; GP8-GP11 are used by the onboard motor driver
+pico_enable_stdio_usb(motor_pid_driver_test 1)
+pico_enable_stdio_uart(motor_pid_driver_test 0)
+
+pico_add_extra_outputs(motor_pid_driver_test)
+
+target_compile_options(motor_pid_driver PRIVATE -Wall -Wextra -Wno-unused-parameter)
+target_compile_options(motor_pid_driver_test PRIVATE -Wall -Wextra -Wno-unused-parameter)
