@@ -35,4 +35,5 @@ pico_sdk_init()
 
 add_subdirectory(app)
 add_subdirectory(app/subsystem_2)
+add_subdirectory(app/subsystem_5)
 add_subdirectory(app/wifi_telemetry)
