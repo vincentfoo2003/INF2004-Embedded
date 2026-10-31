@@ -1,127 +1,175 @@
+#include <stdio.h>
+#include <string.h>
 #include "pico/stdlib.h"
 #include "FreeRTOS.h"
 #include "task.h"
 #include "queue.h"
 #include "telemetry.h"
 #include "connect.h"
+#include "motor_pid_driver.h"
 
-#define SSID "-"
-#define PASS "-"
-#define SERVER_IP "192.168.1.100"
-#define SERVER_PORT 8080
-#define MQTT_TOPIC "test/topic"
-#define LOG true
+#define SSID        "-"
+#define PASS        "-"
+#define SERVER_IP   "192.168.1.100"
+#define SERVER_PORT 1883U
+#define MQTT_TOPIC  "se17/telemetry"
+#define LOG         true
 
-#define TASK_WIFI_PRIORITY tskIDLE_PRIORITY + 1UL
-#define TASK_DUMMY_PRIORITY tskIDLE_PRIORITY + 2UL
+#define TASK_WIFI_PRIORITY    (tskIDLE_PRIORITY + 1UL)
+#define TASK_CONTROL_PRIORITY (tskIDLE_PRIORITY + 2UL)
+#define TASK_MOTOR_PRIORITY   (tskIDLE_PRIORITY + 3UL)
 
 typedef struct {
-    uint8_t id;
-    uint8_t data;
+    uint8_t  id;
+    uint32_t data;
 } TelemetryData;
 
-QueueHandle_t xTelemetryQueue = NULL;
-TaskHandle_t xTaskConnect;
-TaskHandle_t xTaskMqttPub;
-TaskHandle_t xTaskMqttConn;
-TaskHandle_t xTaskDummy;
+volatile uint8_t g_system_faults = 0U;
+QueueHandle_t    g_motor_queue   = NULL;
+QueueHandle_t    xTelemetryQueue = NULL;
+
+TaskHandle_t xTaskConnect  = NULL;
+TaskHandle_t xTaskMqttPub  = NULL;
+TaskHandle_t xTaskMqttConn = NULL;
+TaskHandle_t xTaskMotor    = NULL;
 
 mqtt_config_t mqtt_config;
 
-void mqtt_publish_task(__unused void *params) {
+/**
+ * @brief Overrides weak hook in motor_pid_driver.c to forward motor telemetry to MQTT queue.
+ */
+bool mqtt_enqueue_telemetry(uint8_t source_id, uint32_t packed_data)
+{
+    if (NULL == xTelemetryQueue)
+    {
+        return false;
+    }
+
+    TelemetryData item = {
+        .id   = source_id,
+        .data = packed_data
+    };
+
+    /* Non-blocking send so the 50Hz PID loop never stalls when Wi-Fi is busy */
+    return (pdPASS == xQueueSend(xTelemetryQueue, &item, (TickType_t)0U));
+}
+
+void mqtt_publish_task(void *params)
+{
+    (void)params;
     TelemetryData telemetry;
-    
-    while (1) { 
+    char serialized_data[24];
+
+    for (;;)
+    {
+        /* Block until MQTT connection task signals that broker is connected */
         ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
 
-        if (xQueueReceive(xTelemetryQueue, &telemetry, pdMS_TO_TICKS(500)) == pdPASS) {
-            printf("[INFO] Retreived {id: %u, data: %u} from queue\n", telemetry.id, telemetry.data);
-            
-            // basic serializer for demonstration purposes only.
-            char serialized_data[7];
-            sprintf(serialized_data, "%u%u", telemetry.id, telemetry.data);
-            
-            mqtt_pub(&mqtt_config, &serialized_data, sizeof(serialized_data));
-        } else {
-            printf("[WARN] Queue is empty or timeout occurred\n");
+        /* Drain and publish telemetry items while MQTT remains connected */
+        while (mqtt_status(&mqtt_config) != 0U)
+        {
+            if (xQueueReceive(xTelemetryQueue, &telemetry, pdMS_TO_TICKS(500U)) == pdPASS)
+            {
+                int len = snprintf(serialized_data, sizeof(serialized_data),
+                                   "%u:%lu", telemetry.id, (unsigned long)telemetry.data);
+                if (len > 0)
+                {
+                    mqtt_pub(&mqtt_config, serialized_data, (u16_t)len);
+                }
+            }
         }
     }
 }
 
-void mqtt_conn_task(__unused void *params) {
-    bool setup = 0;
-    
-    while (1) {
-        if (conn_status() <= 1) ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
-        
-        if (!setup) {
-            mqtt_config = mqtt_setup(SERVER_IP, SERVER_PORT, MQTT_TOPIC, LOG);
-            setup = 1;
+void mqtt_conn_task(void *params)
+{
+    (void)params;
+    bool setup = false;
+
+    for (;;)
+    {
+        if (conn_status() <= 1)
+        {
+            ulTaskNotifyTake(pdTRUE, portMAX_DELAY);
         }
-        
+
+        if (!setup)
+        {
+            mqtt_config = mqtt_setup(SERVER_IP, SERVER_PORT, MQTT_TOPIC, LOG);
+            setup = true;
+        }
+
         mqtt_connect(&mqtt_config);
-        vTaskDelay(pdMS_TO_TICKS(5000));
-        
-        if (mqtt_status(&mqtt_config) == 0) {
+        vTaskDelay(pdMS_TO_TICKS(2000U));
+
+        if (mqtt_status(&mqtt_config) == 0U)
+        {
             mqtt_wifi_disconnect(&mqtt_config);
+            vTaskDelay(pdMS_TO_TICKS(3000U));
             continue;
         }
-        
+
+        /* Notify publish task to start streaming queue data */
         xTaskNotifyGive(xTaskMqttPub);
-        vTaskDelay(pdMS_TO_TICKS(5000));
-        
+
+        /* Stay connected as long as Wi-Fi and MQTT broker remain up */
+        while ((conn_status() > 1) && (mqtt_status(&mqtt_config) != 0U))
+        {
+            vTaskDelay(pdMS_TO_TICKS(1000U));
+        }
+
         mqtt_wifi_disconnect(&mqtt_config);
     }
 }
 
-void connect_task(__unused void *params) {
-    bool reconn = 0;
-    while (1) {
-        if(connect(SSID, PASS, reconn, LOG)) {
-            reconn = 1;
+void connect_task(void *params)
+{
+    (void)params;
+    bool reconn = false;
+
+    for (;;)
+    {
+        if (connect(SSID, PASS, reconn, LOG))
+        {
+            reconn = true;
+            vTaskDelay(pdMS_TO_TICKS(2000U));
             continue;
-        } else {
+        }
+        else
+        {
             xTaskNotifyGive(xTaskMqttConn);
         }
-        
-        reconn = 1;
-        
-        while (conn_status() > 1) {
+
+        reconn = true;
+
+        while (conn_status() > 1)
+        {
             conn_poll();
-            // printf("conn_status: %d\n", conn_status());
-            vTaskDelay(pdMS_TO_TICKS(5000));
+            vTaskDelay(pdMS_TO_TICKS(5000U));
         }
     }
 }
 
-void dummy_task(__unused void *params) {
-    TelemetryData telemetry;
-    uint8_t counter = 0;
-    
-    while (1) {
-        telemetry.id = 1;
-        telemetry.data = counter++;
-        
-        if (xQueueSend(xTelemetryQueue, &telemetry, pdMS_TO_TICKS(100)) == pdPASS) {
-            printf("[INFO] Sent {id: %u, data: %u} to queue\n", telemetry.id, telemetry.data);
-        } else {
-            printf("[ERROR] Failed to send message\n");
-        }
-        
-        vTaskDelay(pdMS_TO_TICKS(10000));
-    }
-}
-
-void vLaunch( void) {
-    xTaskCreate(dummy_task, "DummyThread", configMINIMAL_STACK_SIZE, NULL, TASK_DUMMY_PRIORITY, &xTaskDummy);
+void vLaunch(void)
+{
+    xTaskCreate(vMotionControlTask, "MotionPID", 1024U, NULL, TASK_MOTOR_PRIORITY, &xTaskMotor);
     xTaskCreate(connect_task, "ConnectThread", configMINIMAL_STACK_SIZE, NULL, TASK_WIFI_PRIORITY, &xTaskConnect);
     xTaskCreate(mqtt_conn_task, "MQTTConnThread", configMINIMAL_STACK_SIZE, NULL, TASK_WIFI_PRIORITY, &xTaskMqttConn);
     xTaskCreate(mqtt_publish_task, "MQTTPubThread", configMINIMAL_STACK_SIZE, NULL, TASK_WIFI_PRIORITY, &xTaskMqttPub);
     vTaskStartScheduler();
 }
 
-int main(void) {
+int main(void)
+{
     stdio_init_all();
-    xTelemetryQueue = xQueueCreate(10, sizeof(TelemetryData));
+
+    g_motor_queue   = xQueueCreate(8U, sizeof(uint16_t));
+    xTelemetryQueue = xQueueCreate(32U, sizeof(TelemetryData));
+
     vLaunch();
+
+    for (;;)
+    {
+    }
+    return 0;
 }
