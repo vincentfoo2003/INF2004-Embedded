@@ -4,12 +4,16 @@
  * Hardware-coupled servo driver for GP12. Configures GP12's own PWM slice for a
  * 20 ms (50 Hz) frame and positions the servo by high-pulse width.
  *
- * Design mapping (design.md "Servo angle -> PWM duty"):
+ * Design mapping (design.md "Servo angle -> PWM duty"), calibrated to match the
+ * values proven on the assembled car's bench test (hardware_full_onboard_test):
  *   - 50 Hz servo => 20 ms (20000 us) period.
- *   - Position is set by the high pulse: ~1000 us (one extreme) ..
- *     ~2000 us (other extreme), ~1500 us centre.
- *   - The usable 30..150 deg scan span maps linearly onto 1000..2000 us:
- *         pulse_us = 1000 + ((angle_deg - 30) * 1000) / 120
+ *   - Position is set by the high pulse over the FULL 0..180 deg servo travel:
+ *         500 us (0 deg) .. 1500 us (90 deg, centre) .. 2500 us (180 deg)
+ *     i.e. pulse_us = 500 + (angle_deg * 2000) / 180.
+ *   - The usable 30..150 deg scan span therefore lands on ~833..2167 us, which
+ *     reproduces the bench-tested SERVO_30_DEG(833)..SERVO_150_DEG(2167) pulses
+ *     exactly (previously this driver only reached 1000..2000 us, so the servo
+ *     physically under-rotated at the scan extremes).
  *   - level (slice counts) = pulse_us * wrap / 20000.
  *
  * Clock/wrap: the slice clock is clk_sys / clkdiv. We pick clkdiv so one slice
@@ -43,13 +47,14 @@
 /* One slice tick == 1 us; wrap counts the whole 20 ms frame (0..19999). */
 #define SRV_WRAP        ((uint16_t)(SRV_PERIOD_US - 1u))   /* 19999 */
 
-/* Pulse-width endpoints for the usable scan span (us). */
-#define SRV_PULSE_MIN_US  1000u  /* at SRV_MIN_DEG (30 deg)  */
-#define SRV_PULSE_MAX_US  2000u  /* at SRV_MAX_DEG (150 deg) */
-#define SRV_PULSE_SPAN_US (SRV_PULSE_MAX_US - SRV_PULSE_MIN_US) /* 1000 us */
-
-/* Angular span mapped onto the pulse span: SRV_MAX_DEG - SRV_MIN_DEG (120). */
-#define SRV_DEG_SPAN      ((uint32_t)SRV_MAX_DEG - (uint32_t)SRV_MIN_DEG)
+/* Full-travel pulse calibration (us), matching the bench-tested servo:
+ * 500 us at 0 deg .. 2500 us at 180 deg, linear across the whole travel.
+ * The usable 30..150 deg scan window samples this same line, so 30 deg -> 833 us
+ * and 150 deg -> 2167 us exactly as proven on the assembled car. */
+#define SRV_PULSE_0DEG_US    500u   /* high pulse at 0 deg   */
+#define SRV_PULSE_180DEG_US  2500u  /* high pulse at 180 deg */
+#define SRV_PULSE_FULL_SPAN_US (SRV_PULSE_180DEG_US - SRV_PULSE_0DEG_US) /* 2000 us */
+#define SRV_TRAVEL_DEG       180u   /* full mechanical travel the pulse maps over */
 
 /* FAULT_SERVO latch for this driver; ORed into the central mask by task 12.2. */
 static bool s_servo_fault = false;
@@ -58,17 +63,19 @@ static bool s_servo_fault = false;
 static uint32_t s_clkdiv_int = 1u;
 
 /*
- * Linear map of an in-range angle (30..150 deg) to its high-pulse width in us
- * (1000..2000). Pure arithmetic; kept local to the driver because the result is
- * a hardware pulse width, not a reusable logic primitive.
+ * Linear map of an in-range angle (30..150 deg) to its high-pulse width in us,
+ * using the full 0..180 deg -> 500..2500 us calibration proven on the bench
+ * test (30 deg -> 833 us, 90 deg -> 1500 us, 150 deg -> 2167 us). Pure
+ * arithmetic; kept local to the driver because the result is a hardware pulse
+ * width, not a reusable logic primitive.
  */
 static uint16_t servo_angle_to_pulse_us(uint8_t angle_deg)
 {
     uint32_t pulse_us;
 
-    pulse_us = (uint32_t)SRV_PULSE_MIN_US
-             + (((uint32_t)angle_deg - (uint32_t)SRV_MIN_DEG)
-                * (uint32_t)SRV_PULSE_SPAN_US) / SRV_DEG_SPAN;
+    pulse_us = (uint32_t)SRV_PULSE_0DEG_US
+             + ((uint32_t)angle_deg * (uint32_t)SRV_PULSE_FULL_SPAN_US)
+               / (uint32_t)SRV_TRAVEL_DEG;
 
     return (uint16_t)pulse_us;
 }
